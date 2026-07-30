@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import Pusher from 'pusher-js';
 import Confetti from 'react-confetti';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// Replace with your actual UUID from your Supabase table
-const EVENT_ID = 'd5fcc130-f480-46c4-a720-27e203342115'; 
-
 export default function Viewer() {
-  const [status, setStatus] = useState('loading'); 
+  // Default to 'closed' since Pusher relies on live events, not stored database state
+  const [status, setStatus] = useState('closed'); 
   const [targetUrl, setTargetUrl] = useState('');
   
   const [timeLeft, setTimeLeft] = useState(5);
@@ -22,41 +20,41 @@ export default function Viewer() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Database Listener & One-Time Play Check
+  // Realtime Pusher Listener & One-Time Play Check
   useEffect(() => {
-    const fetchInitialState = async () => {
-      const { data } = await supabase.from('launch_config').select('status, target_url').eq('id', EVENT_ID).single();
-      if (data) {
-        // Check if this browser has already seen the launch
-        const isCompleted = localStorage.getItem('launch_completed');
-        
-        if (data.status === 'countdown' && isCompleted === 'true') {
-          // They already saw it, instantly redirect them back to the site
-          window.location.href = data.target_url;
-          return;
-        }
+    // Initialize Pusher Client using environment variables
+    const pusher = new Pusher(import.meta.env.VITE_PUSHER_APP_KEY, {
+      cluster: import.meta.env.VITE_PUSHER_CLUSTER,
+    });
 
-        setStatus(data.status);
-        setTargetUrl(data.target_url);
+    const channel = pusher.subscribe('cyber-wolf-channel');
+
+    channel.bind('launch-event', function(data) {
+      // 1. Handle Admin Reset
+      if (data.status === 'closed') {
+        localStorage.removeItem('launch_completed');
+        setStatus('closed');
+        setTimeLeft(5);
+        setShowCelebration(false);
+        return;
       }
+
+      // 2. Check the local storage stamp to prevent loop-backs
+      const isCompleted = localStorage.getItem('launch_completed');
+      if (data.status === 'countdown' && isCompleted === 'true') {
+        window.location.href = data.targetUrl;
+        return;
+      }
+
+      // 3. Trigger the animation sequence
+      setStatus(data.status);
+      setTargetUrl(data.targetUrl);
+    });
+
+    return () => {
+      channel.unbind_all();
+      channel.unsubscribe();
     };
-    
-    fetchInitialState();
-
-    const channel = supabase.channel('launch-listener')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'launch_config', filter: `id=eq.${EVENT_ID}` },
-        (payload) => {
-          // If the Admin resets the system to closed, erase the stamp for testing
-          if (payload.new.status === 'closed') {
-            localStorage.removeItem('launch_completed');
-          }
-          
-          setStatus(payload.new.status);
-          setTargetUrl(payload.new.target_url);
-        }
-      ).subscribe();
-
-    return () => supabase.removeChannel(channel);
   }, []);
 
   // Timer, Audio Logic, & Redirect
@@ -64,7 +62,6 @@ export default function Viewer() {
     let timer;
     if (status === 'countdown' && timeLeft > 0) {
       
-      // Play tick sound via DOM
       if (soundEnabled) {
         const tickAudio = document.getElementById('audio-tick');
         if (tickAudio) {
@@ -78,7 +75,6 @@ export default function Viewer() {
     } else if (status === 'countdown' && timeLeft === 0 && !showCelebration) {
       setShowCelebration(true);
       
-      // Play launch sound via DOM
       if (soundEnabled) {
         const launchAudio = document.getElementById('audio-launch');
         if (launchAudio) {
@@ -87,7 +83,7 @@ export default function Viewer() {
         }
       }
       
-      // Apply stamp and redirect after 6 seconds
+      // Apply stamp and redirect after 6 seconds of celebration
       setTimeout(() => {
         localStorage.setItem('launch_completed', 'true');
         window.location.href = targetUrl;
@@ -100,7 +96,6 @@ export default function Viewer() {
   // Audio Unlock Sequence
   const handleEnableAudio = () => {
     setSoundEnabled(true);
-    // Silent play to unlock the browser's audio context
     const tickAudio = document.getElementById('audio-tick');
     if (tickAudio) {
       tickAudio.play().then(() => {
@@ -110,12 +105,9 @@ export default function Viewer() {
     }
   };
 
-  if (status === 'loading') return <div className="min-h-screen bg-gray-950 flex items-center justify-center text-cyan-500 font-mono">Connecting to Terminal...</div>;
-
   return (
     <div className="relative min-h-screen bg-gray-950 overflow-hidden flex items-center justify-center font-sans">
       
-      {/* Hidden HTML5 Audio Tags */}
       <audio id="audio-tick" src="/tick.mp3" preload="auto"></audio>
       <audio id="audio-launch" src="/launch.mp3" preload="auto"></audio>
 
@@ -176,12 +168,10 @@ export default function Viewer() {
             transition={{ duration: 0.5 }}
             className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black"
           >
-            {/* Custom Confetti Colors: Cyber Cyan, Deep Blue, White, Silver */}
             <Confetti width={windowSize.width} height={windowSize.height} recycle={true} numberOfPieces={800} gravity={0.15} colors={['#22d3ee', '#1e3a8a', '#ffffff', '#94a3b8']} />
             
-            {/* Epic Logo Reveal */}
             <motion.img 
-              src="/cyber-wolf-logo.jpg" 
+              src="/cyber-wolf-logo.png" 
               alt="Cyber Wolf Logo"
               initial={{ scale: 0, rotate: -180, opacity: 0 }}
               animate={{ scale: 1, rotate: 0, opacity: 1 }}
