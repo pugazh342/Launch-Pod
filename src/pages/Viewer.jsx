@@ -7,7 +7,7 @@ export default function Viewer() {
   const [status, setStatus] = useState('closed'); 
   const [targetUrl, setTargetUrl] = useState('');
   
-  const [timeLeft, setTimeLeft] = useState(5);
+  const [timeLeft, setTimeLeft] = useState(15);
   const [showCelebration, setShowCelebration] = useState(false);
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [soundEnabled, setSoundEnabled] = useState(false);
@@ -177,7 +177,7 @@ export default function Viewer() {
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(37,99,235,0.15)_0%,transparent_60%)]"></div>
 
             <motion.img 
-              src="/cyber-wolf-logo.png" 
+              src="/cyber-wolf-logo.jpg" 
               alt="Cyber Wolf Logo"
               initial={{ scale: 0.5, opacity: 0, filter: "blur(20px)", y: 50 }}
               animate={{ scale: 1, opacity: 1, filter: "blur(0px)", y: 0 }}
